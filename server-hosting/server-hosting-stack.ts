@@ -7,6 +7,7 @@ import * as s3_assets from 'aws-cdk-lib/aws-s3-assets';
 import * as lambda_nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Runtime, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
+import { SpotInstance } from 'cdk-ec2-spot-simple';
 
 export class ServerHostingStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -69,13 +70,19 @@ export class ServerHostingStack extends Stack {
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(15000), "Beacon port")
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(15777), "Query port")
 
-    const server = new ec2.Instance(this, `${prefix}Server`, {
+    const server = new SpotInstance(this, `${prefix}Server`, {
+      vpc: ec2.Vpc.fromLookup(this, "defaultVPC", { isDefault: true }),
       // 4 vCPU, 16 GB RAM should be enough for most factories
-      instanceType: new ec2.InstanceType("r7i.xlarge"),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.m6i, ec2.InstanceSize.large),
       // get exact ami from parameter exported by canonical
       // https://discourse.ubuntu.com/t/finding-ubuntu-images-with-the-aws-ssm-parameter-store/15507
-      machineImage: ec2.MachineImage.fromSsmParameter("/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"),
+      machineImage: new ec2.MachineImage.fromSsmParameter("/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"),
       // storage for steam, satisfactory and save files
+      spotOptions: {
+          interruptionBehavior: ec2.SpotInstanceInterruption.STOP,
+          requestType: ec2.SpotRequestType.PERSISTENT,
+          maxPrice: 0.0360
+          },
       blockDevices: [
         {
           deviceName: "/dev/sda1",
@@ -87,7 +94,7 @@ export class ServerHostingStack extends Stack {
       userDataCausesReplacement: true,
       vpc,
       securityGroup,
-    })
+    });
 
     // Add Base SSM Permissions, so we can use AWS Session Manager to connect to our server, rather than external SSH.
     server.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'));
