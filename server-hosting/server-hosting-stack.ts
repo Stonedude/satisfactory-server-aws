@@ -71,12 +71,11 @@ export class ServerHostingStack extends Stack {
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(15777), "Query port")
 
     const server = new SpotInstance(this, `${prefix}Server`, {
-      vpc: ec2.Vpc.fromLookup(this, "defaultVPC", { isDefault: true }),
       // 4 vCPU, 16 GB RAM should be enough for most factories
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.m6i, ec2.InstanceSize.large),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.M6I, ec2.InstanceSize.LARGE),
       // get exact ami from parameter exported by canonical
       // https://discourse.ubuntu.com/t/finding-ubuntu-images-with-the-aws-ssm-parameter-store/15507
-      machineImage: new ec2.MachineImage.fromSsmParameter("/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"),
+      machineImage: ec2.MachineImage.fromSsmParameter("/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"),
       // storage for steam, satisfactory and save files
       spotOptions: {
           interruptionBehavior: ec2.SpotInstanceInterruption.STOP,
@@ -94,8 +93,7 @@ export class ServerHostingStack extends Stack {
       userDataCausesReplacement: true,
       vpc,
       securityGroup,
-    });
-
+    })
     // Add Base SSM Permissions, so we can use AWS Session Manager to connect to our server, rather than external SSH.
     server.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'));
 
