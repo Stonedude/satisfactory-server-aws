@@ -6,8 +6,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3_assets from 'aws-cdk-lib/aws-s3-assets';
 import * as lambda_nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import { Runtime, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
-import { SpotInstance } from 'cdk-ec2-spot-simple';
+import * as apigw from 'aws-cdk-lib/aws-apigateway';
 
 export class ServerHostingStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -62,30 +61,21 @@ export class ServerHostingStack extends Stack {
       description: "Allow Satisfactory client to connect to server",
     })
 
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(7777), "Game port UPD ipv4")
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(7777), "Game port TCP ipv4")
-    securityGroup.addIngressRule(ec2.Peer.anyIpv6(), ec2.Port.udp(7777), "Game port UPD ipv6")
-    securityGroup.addIngressRule(ec2.Peer.anyIpv6(), ec2.Port.tcp(7777), "Game port TCP ipv6")
-
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(7777), "Game port")
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(15000), "Beacon port")
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(15777), "Query port")
 
-    const server = new SpotInstance(this, `${prefix}Server`, {
-      // 4 vCPU, 16 GB RAM should be enough for most factories
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.M6I, ec2.InstanceSize.LARGE),
+    const server = new ec2.Instance(this, `${prefix}Server`, {
+      // 2 vCPU, 8 GB RAM should be enough for most factories
+      instanceType: new ec2.InstanceType("m6i.large"),
       // get exact ami from parameter exported by canonical
       // https://discourse.ubuntu.com/t/finding-ubuntu-images-with-the-aws-ssm-parameter-store/15507
       machineImage: ec2.MachineImage.fromSsmParameter("/aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id"),
       // storage for steam, satisfactory and save files
-      spotOptions: {
-          interruptionBehavior: ec2.SpotInstanceInterruption.STOP,
-          requestType: ec2.SpotRequestType.PERSISTENT,
-          maxPrice: 0.0360
-          },
       blockDevices: [
         {
           deviceName: "/dev/sda1",
-          volume: ec2.BlockDeviceVolume.ebs(50, {volumeType: ec2.EbsDeviceVolumeType.GP3}),
+          volume: ec2.BlockDeviceVolume.ebs(15),
         }
       ],
       // server needs a public ip to allow connections
@@ -94,6 +84,7 @@ export class ServerHostingStack extends Stack {
       vpc,
       securityGroup,
     })
+
     // Add Base SSM Permissions, so we can use AWS Session Manager to connect to our server, rather than external SSH.
     server.role.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'));
 
@@ -151,8 +142,7 @@ export class ServerHostingStack extends Stack {
       const startServerLambda = new lambda_nodejs.NodejsFunction(this, `${Config.prefix}StartServerLambda`, {
         entry: './server-hosting/lambda/index.ts',
         description: "Restart game server",
-        timeout: Duration.seconds(20),
-        runtime: Runtime.NODEJS_20_X,
+        timeout: Duration.seconds(10),
         environment: {
           INSTANCE_ID: server.instanceId
         }
@@ -160,33 +150,16 @@ export class ServerHostingStack extends Stack {
 
       startServerLambda.addToRolePolicy(new iam.PolicyStatement({
         actions: [
-          'ec2:StartInstances'
+          'ec2:StartInstances',
         ],
         resources: [
           `arn:aws:ec2:*:${Config.account}:instance/${server.instanceId}`,
         ]
       }))
 
-      startServerLambda.addToRolePolicy(new iam.PolicyStatement({
-        actions: [
-          "ec2:DescribeInstances"
-        ],
-        resources: [
-          '*'
-        ]
-      }))
-      
-      startServerLambda.addToRolePolicy(new iam.PolicyStatement({
-        actions: [
-          "ce:GetCostAndUsage"
-        ],
-        resources: [
-          '*'
-        ]
-      }))
-
-      startServerLambda.addFunctionUrl({
-        authType: FunctionUrlAuthType.NONE
+      new apigw.LambdaRestApi(this, `${Config.prefix}StartServerApi`, {
+        handler: startServerLambda,
+        description: "Trigger lambda function to start server",
       })
     }
   }
