@@ -4,7 +4,7 @@
 #  1: string - S3 bucket for your backup save files (required)
 #  2: true|false - whether to use Satisfactory Experimental build (optional, default false)
 S3_SAVE_BUCKET=$1
-USE_EXPERIMENTAL_BUILD=${2-false}
+USE_EXPERIMENTAL_BUILD=${2-true}
 
 # install steamcmd: https://developer.valvesoftware.com/wiki/SteamCMD?__cf_chl_jschl_tk__=pmd_WNQPOiK18.h0rf16RCYrARI2s8_84hUMwT.7N1xHYcs-1635248050-0-gqNtZGzNAiWjcnBszQiR#Linux.2FmacOS)
 add-apt-repository multiverse
