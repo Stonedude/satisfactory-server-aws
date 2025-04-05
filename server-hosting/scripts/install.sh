@@ -18,11 +18,7 @@ echo steam steam/license note '' | sudo debconf-set-selections
 apt install -y unzip lib32gcc1 steamcmd crudini
 
 # install satisfactory: https://satisfactory.fandom.com/wiki/Dedicated_servers
-if [ $USE_EXPERIMENTAL_BUILD = "true" ]; then
   STEAM_INSTALL_SCRIPT="/usr/games/steamcmd +login anonymous +app_update 1690800 -beta experimental validate +quit"
-else
-  STEAM_INSTALL_SCRIPT="/usr/games/steamcmd +login anonymous +app_update 1690800 -beta public validate +quit"
-fi
 # note, we are switching users because steam doesn't recommend running steamcmd as root
 su - ubuntu -c "$STEAM_INSTALL_SCRIPT"
 
